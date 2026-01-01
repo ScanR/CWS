@@ -3,6 +3,8 @@ const { parse } = require("node-html-parser");
 
 const path = "./series";
 
+const episodeLink = [];
+
 const series = {
   GoldenExperience: "KC_005168_S",
 };
@@ -14,27 +16,48 @@ const f = numberFormat.format;
 
 const main = async () => {
   if (!fs.existsSync(path)) fs.mkdirSync(path);
-  const allDl = Object.entries(series).map(async ([name, value]) => {
-    const res = await fetch(`https://comic-walker.com/detail/${value}`).then((res) => res.text());
-    const document = parse(res);
-    const jsonId = JSON.parse(document.querySelector("#__NEXT_DATA__").innerHTML);
-    const latestEpisode = jsonId.props.pageProps.dehydratedState.queries.shift().state.data.latestEpisodes.result.shift();
-    const numChap = latestEpisode.internal.episodeNo;
-    const json = await fetch(`https://comic-walker.com/api/contents/viewer?episodeId=${latestEpisode.id}&imageSizeType=width%3A1284`).then((res) => res.json());
-
-    const folderSeries = `./${path}/${name}`;
-    if (!fs.existsSync(folderSeries)) fs.mkdirSync(folderSeries);
-    const folder = `${folderSeries}/${f(numChap)}`;
-    if (fs.existsSync(folder)) return console.log(`${name} chap ${numChap} déjà dl`);
-    fs.mkdirSync(folder);
-    const download = downloader(folder);
-    const dl = json.manuscripts.map(download);
-    await Promise.all(dl);
-    console.log(`Download End : ${name} chap ${numChap}`);
-  });
+  let allDl;
+  if(episodeLink[0]){
+    allDl = episodeID.map(async (link) => {
+      const url = link.split("/");
+      const serie = url[4];
+      const episode = url[6];
+      const name = Object.entries(series).filter((entry) => entry[1] === serie)?.shift()?.shift();
+      await scrap(name,serie,episode);
+    })
+  } else {
+    allDl = Object.entries(series).map(async ([name, serie]) => {
+      await scrap(name,serie);
+    });
+  }
   await Promise.all(allDl);
   console.log("Traitement terminé");
 };
+
+
+const scrap = async (name,serie,chapitre) => {
+  const res = await fetch(`https://comic-walker.com/detail/${serie}`).then((res) => res.text());
+  const document = parse(res);
+  const jsonId = JSON.parse(document.querySelector("#__NEXT_DATA__").innerHTML);
+  const data = jsonId.props.pageProps.dehydratedState.queries.shift().state.data;
+  const dlEpisode = !chapitre ?
+      data.latestEpisodes.result.shift() :
+      data.latestEpisodes.result.filter(episode => episode.code === chapitre).shift();
+  const numChap = dlEpisode.internal.episodeNo;
+  const json = await fetch(`https://comic-walker.com/api/contents/viewer?episodeId=${dlEpisode.id}&imageSizeType=width%3A1284`).then((res) => res.json());
+  if(!name) {
+    name = data.work.title;
+  }
+  const folderSeries = `./${path}/${name}`;
+  if (!fs.existsSync(folderSeries)) fs.mkdirSync(folderSeries);
+  const folder = `${folderSeries}/${f(numChap)}`;
+  if (fs.existsSync(folder)) return console.log(`${name} chap ${numChap} déjà dl`);
+  fs.mkdirSync(folder);
+  const download = downloader(folder);
+  const dl = json.manuscripts.map(download);
+  await Promise.all(dl);
+  console.log(`Download End : ${name} chap ${numChap}`);
+}
 
 const downloader = (folder) => {
   return async (data) => {
@@ -66,5 +89,7 @@ const populateKey = (e) => {
   if (e == null) throw Error("error");
   return new Uint8Array(t.map((e) => parseInt(e, 16)));
 };
+
+
 
 main();
